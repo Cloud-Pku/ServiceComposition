@@ -16,12 +16,12 @@ df = pd.DataFrame(columns=columns)
 
 for i in range(service_num):
     row = data[i].split(',')
-    row[1] /= 100
-    row[3] /= 100
-    row[4] /= 100
     name = row[9]
     wsdl = ''.join(row[10:])
     row = [float(k) for k in row[:9]]
+    row[1] /= 100
+    row[3] /= 100
+    row[4] /= 100
     row.append(name)
     row.append(wsdl)
     df.loc[len(df.index)] = row

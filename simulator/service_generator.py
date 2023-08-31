@@ -24,9 +24,17 @@ class ServiceGenerator:
         print('complete')
         
     def sample(self, nums=1, attributes=['Response Time', 'Availability', 'Throughput', 'Reliability']):
+        services = [{}] * nums
         for att in attributes:
-            
+            tmp_atts = self.kdes[att].resample(nums)[0]
+            np.clip(tmp_atts, self.bounds[att][0], self.bounds[att][1])
+            for i in range(nums):
+                services[i][att] = tmp_atts[i]
+        return services
 
-gen = ServiceGenerator()
 
-# new_samples = stats.gaussian_kde(data)(np.linspace(-2, 12, num=1000)).round(decimals=2)
+if __name__ == '__main__':
+    gen = ServiceGenerator()
+    print(gen.sample(9))
+
+    # new_samples = stats.gaussian_kde(data)(np.linspace(-2, 12, num=1000)).round(decimals=2)

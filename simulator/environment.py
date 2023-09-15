@@ -1,6 +1,5 @@
 import numpy as np
-from service_generator import ServiceGenerator
-from workflow_generator import WorkflowGenerator
+from generator import WorkflowGenerator, ServiceGenerator, ConstraintGenerator
 
 class ServiceComEnv:
     def __init__(self, max_node_num=10, max_ser_set=100, attributes=['Response Time', 'Availability', 'Throughput', 'Reliability']):
@@ -9,10 +8,11 @@ class ServiceComEnv:
         self.attributes = attributes
         self.workflow_gen = WorkflowGenerator(max_node_num)
         self.service_gen = ServiceGenerator()
+        self.constraint_gen = ConstraintGenerator(self.service_gen)
     
     def reset(self, num=1, edge_density=0.2, mode='human', norm=True):
-        workflows = self.workflow_gen.sample(num, edge_density=edge_density)
-        
+        workflows, topologicals = self.workflow_gen.sample(num, edge_density=edge_density)
+        constrains = self.constraint_gen.sample(workflows, topologicals, self.attributes, norm=norm, mode=mode)
         if mode == 'human':
             tasks = [{}] * num
             for i in range(num):
@@ -21,31 +21,33 @@ class ServiceComEnv:
                 for j in range(self.max_node_num):
                     ser_num = np.random.randint(1, self.max_ser_set)
                     tasks[i]['ser_set'].append(self.service_gen.sample(ser_num))
-            return tasks
+            return tasks, None
         else:
-            tasks = []
+            tasks = np.zeros([num, self.max_node_num, self.max_node_num + len(self.attributes) * self.max_ser_set])
+            masks = np.ones([num, self.max_node_num, self.max_ser_set])
             for i in range(num):
-                adj_mt = workflows[i]
-                set_i_mt = []
+                tasks[i, :, :self.max_node_num] = workflows[i]
                 for j in range(self.max_node_num):
-                    ser_num = np.random.randint(1, self.max_ser_set)
-                    set_j = self.service_gen.sample(ser_num, self.attributes)
                     
-                    set_j_vector = []
+                    ser_num = np.random.randint(1, self.max_ser_set)
+                    set_j = self.service_gen.sample(ser_num, self.attributes, norm=norm)
+                    order = list(range(self.max_ser_set))
+                    np.random.shuffle(order)
+                    order = order[:ser_num]
+                    masks[i, j, order] = 0
+
                     for n in range(ser_num):
-                        for k, v in set_j[n].items():
-                            set_j_vector.append((v - self.service_gen.mean[k])/self.service_gen.std[k] if norm else v)
-                    set_j_vector += [0]*len(self.attributes)*(self.max_ser_set - ser_num)
-                    set_i_mt.append(np.array(set_j_vector))
-                set_i_mt = np.vstack(set_i_mt)
-                tasks.append(np.concatenate((adj_mt, set_i_mt), 1))
-            tasks = np.vstack(tasks).reshape(num, self.max_node_num, -1)
-            return tasks
+                        for k_i, k in enumerate(self.attributes):
+                            tasks[i, j, self.max_node_num + order[n]*len(self.attributes) + k_i] = set_j[n][k]
+            return tasks, masks, constrains
+    def step(self, ):
+        pass
                     
 
 if __name__ == '__main__':
-    env = ServiceComEnv()
-    tasks = env.reset(2, mode='tiny')
+    env = ServiceComEnv(3, 4)
+    tasks, masks, constraints = env.reset(2, mode='tiny')
+    print(masks)
     print(tasks)
-        
+    print(constraints)        
     

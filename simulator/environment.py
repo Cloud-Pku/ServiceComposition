@@ -11,22 +11,22 @@ class ServiceComEnv:
         self.constraint_gen = ConstraintGenerator(self.service_gen)
     
     def reset(self, num=1, edge_density=0.2, mode='human', norm=True):
-        workflows, topologicals = self.workflow_gen.sample(num, edge_density=edge_density)
-        constrains = self.constraint_gen.sample(workflows, topologicals, self.attributes, norm=norm, mode=mode)
+        self.workflows, self.topologicals = self.workflow_gen.sample(num, edge_density=edge_density)
+        self.constrains = self.constraint_gen.sample(self.workflows, self.topologicals, self.attributes, norm=norm, mode=mode)
         if mode == 'human':
-            tasks = [{}] * num
+            self.tasks = [{}] * num
             for i in range(num):
-                tasks[i]['adj_matrix'] = workflows[i]
-                tasks[i]['ser_set'] = []
+                self.tasks[i]['adj_matrix'] = workflows[i]
+                self.tasks[i]['ser_set'] = []
                 for j in range(self.max_node_num):
                     ser_num = np.random.randint(1, self.max_ser_set)
-                    tasks[i]['ser_set'].append(self.service_gen.sample(ser_num))
-            return tasks, None
+                    self.tasks[i]['ser_set'].append(self.service_gen.sample(ser_num))
+            return self.tasks, None
         else:
-            tasks = np.zeros([num, self.max_node_num, self.max_node_num + len(self.attributes) * self.max_ser_set])
-            masks = np.ones([num, self.max_node_num, self.max_ser_set])
+            self.tasks = np.zeros([num, self.max_node_num, self.max_node_num + len(self.attributes) * self.max_ser_set])
+            self.masks = np.ones([num, self.max_node_num, self.max_ser_set])
             for i in range(num):
-                tasks[i, :, :self.max_node_num] = workflows[i]
+                self.tasks[i, :, :self.max_node_num] = workflows[i]
                 for j in range(self.max_node_num):
                     
                     ser_num = np.random.randint(1, self.max_ser_set)
@@ -34,20 +34,44 @@ class ServiceComEnv:
                     order = list(range(self.max_ser_set))
                     np.random.shuffle(order)
                     order = order[:ser_num]
-                    masks[i, j, order] = 0
+                    self.masks[i, j, order] = 0
 
                     for n in range(ser_num):
                         for k_i, k in enumerate(self.attributes):
-                            tasks[i, j, self.max_node_num + order[n]*len(self.attributes) + k_i] = set_j[n][k]
-            return tasks, masks, constrains
-    def step(self, ):
-        pass
+                            self.tasks[i, j, self.max_node_num + order[n]*len(self.attributes) + k_i] = set_j[n][k]
+            return self.workflows, self.tasks, self.masks, self.constrains
+    def step(self, solutions):
+        query_num = len(self.workflows)
+        for query in range(query_num):
+            workflow = self.workflows[query]
+            topological = self.topologicals[query]
+            task = self.tasks[query]
+            node_num = len(workflow)
+            solution = solutions[query]
+            aggregation = {k : np.array([0.]*node_num) for k in self.attributes}
+            for node_idx in reversed(topological):
+                connect = workflow[node_idx]
+                con_idx = np.where(connect==1)[0]
+                
+                # Response Time
+                if len(con_idx) == 0:
+                    aggregation['Response Time'][node_idx] = task[node_idx, node_idx + ]
+            
                     
 
 if __name__ == '__main__':
-    env = ServiceComEnv(3, 4)
-    tasks, masks, constraints = env.reset(2, mode='tiny')
-    print(masks)
-    print(tasks)
-    print(constraints)        
+    max_node_num = 3
+    max_ser_set = 4
+    batch = 2
+    env = ServiceComEnv(max_node_num, max_ser_set)
+    workflows, tasks, masks, constraints = env.reset(batch, mode='tiny')
+    # print(masks)
+    # print(workflows)
+    # print(tasks)
+    # print(constraints) 
+    
+    solutions = np.random.randint(0, max_ser_set, [batch, max_node_num])
+    env.step(solutions)
+    
+    
     

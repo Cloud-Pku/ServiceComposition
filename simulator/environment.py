@@ -17,7 +17,7 @@ class ServiceComEnv:
     
     def reset(self, num=1, edge_density=0.2, mode='human', norm=True):
         self.workflows, self.topologicals = self.workflow_gen.sample(num, edge_density=edge_density)
-        self.constrains = self.constraint_gen.sample(self.workflows, self.topologicals, self.attributes, norm=norm, mode=mode)
+        self.constraints = self.constraint_gen.sample(self.workflows, self.topologicals, self.attributes, norm=norm, mode=mode)
         if mode == 'human':
             self.tasks = [{}] * num
             for i in range(num):
@@ -53,10 +53,10 @@ class ServiceComEnv:
                         for k_i, k in enumerate(self.attributes):
                             self.tasks[i, j, self.max_node_num + order[n]*len(self.attributes) + k_i] = set_j[n][k]
             
-            return self.workflows, self.tasks, self.masks, self.constrains
+            return self.workflows, self.tasks, self.masks, self.constraints
     def step(self, solutions):
         query_num = len(self.workflows)
-        solution_qos = np.zeros(self.constrains.shape)
+        solution_qos = np.zeros(self.constraints.shape)
         for query in range(query_num):
             workflow = self.workflows[query]
             topological = self.topologicals[query]
@@ -85,22 +85,31 @@ class ServiceComEnv:
             solution_qos[query][2] = min(aggregation['Throughput'])
             solution_qos[query][3] = np.prod(aggregation['Reliability'])
         print(solution_qos)
+        rewards = np.ones((query_num, 1))
+        for query in range(query_num):
+            if solution_qos[query][0] < self.constraints[query][0]:
+                rewards[query] = -1.
+            if np.any(solution_qos[1:] > self.constraints[query]):
+                rewards[query] = -1.
+        return rewards
+
 
                     
 
 if __name__ == '__main__':
     max_node_num = 3
     max_ser_set = 4
-    batch = 2
+    batch = 200
     env = ServiceComEnv(max_node_num, max_ser_set)
-    workflows, tasks, masks, constraints = env.reset(batch, mode='tiny', norm=False)
+    workflows, tasks, masks, constraints = env.reset(batch, mode='tiny', norm=True)
     # print(masks)
     # print(workflows)
     # print(tasks)
     # print(constraints) 
     
     solutions = np.random.randint(0, max_ser_set, [batch, max_node_num])
-    env.step(solutions)
+    rewards = env.step(solutions)
+    print(rewards)
     
     
     

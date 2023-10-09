@@ -1,4 +1,9 @@
 import numpy as np
+import random
+
+ss = 1
+random.seed(ss)
+np.random.seed(ss)
 from generator import WorkflowGenerator, ServiceGenerator, ConstraintGenerator
 
 class ServiceComEnv:
@@ -16,7 +21,7 @@ class ServiceComEnv:
         if mode == 'human':
             self.tasks = [{}] * num
             for i in range(num):
-                self.tasks[i]['adj_matrix'] = workflows[i]
+                self.tasks[i]['adj_matrix'] = self.workflows[i]
                 self.tasks[i]['ser_set'] = []
                 for j in range(self.max_node_num):
                     ser_num = np.random.randint(1, self.max_ser_set)
@@ -25,8 +30,16 @@ class ServiceComEnv:
         else:
             self.tasks = np.zeros([num, self.max_node_num, self.max_node_num + len(self.attributes) * self.max_ser_set])
             self.masks = np.ones([num, self.max_node_num, self.max_ser_set])
+            if norm:
+                self.tasks[:,:, self.max_node_num ::4] = 3. # Response Time
+                self.tasks[:,:, self.max_node_num + 1::4] = -3. # Availability
+                self.tasks[:,:, self.max_node_num + 2::4] = -3. # Throughput
+                self.tasks[:,:, self.max_node_num + 3::4] = -3. # Reliability
+            else:
+                self.tasks[:,:, self.max_node_num ::4] = np.max(self.service_gen.data['Response Time'])
+                # set the other as zeros
             for i in range(num):
-                self.tasks[i, :, :self.max_node_num] = workflows[i]
+                self.tasks[i, :, :self.max_node_num] = self.workflows[i]
                 for j in range(self.max_node_num):
                     
                     ser_num = np.random.randint(1, self.max_ser_set)
@@ -39,9 +52,11 @@ class ServiceComEnv:
                     for n in range(ser_num):
                         for k_i, k in enumerate(self.attributes):
                             self.tasks[i, j, self.max_node_num + order[n]*len(self.attributes) + k_i] = set_j[n][k]
+            
             return self.workflows, self.tasks, self.masks, self.constrains
     def step(self, solutions):
         query_num = len(self.workflows)
+        solution_qos = np.zeros(self.constrains.shape)
         for query in range(query_num):
             workflow = self.workflows[query]
             topological = self.topologicals[query]
@@ -55,8 +70,22 @@ class ServiceComEnv:
                 
                 # Response Time
                 if len(con_idx) == 0:
-                    aggregation['Response Time'][node_idx] = task[node_idx, node_idx + ]
+                    aggregation['Response Time'][node_idx] = task[node_idx, max_node_num + solution[node_idx]*4 ]
+                else:
+                    aggregation['Response Time'][node_idx] = max(aggregation['Response Time'][con_idx]) + task[node_idx, max_node_num + solution[node_idx]*4 ]
+                
+                # Other
+                aggregation['Availability'][node_idx] = task[node_idx, max_node_num + solution[node_idx]*4 + 1]
+                aggregation['Throughput'][node_idx] = task[node_idx, max_node_num + solution[node_idx]*4 + 2]
+                aggregation['Reliability'][node_idx] = task[node_idx, max_node_num + solution[node_idx]*4 + 3]
             
+            # Aggregation
+            solution_qos[query][0] = max(aggregation['Response Time'])
+            solution_qos[query][1] = np.prod(aggregation['Availability'])
+            solution_qos[query][2] = min(aggregation['Throughput'])
+            solution_qos[query][3] = np.prod(aggregation['Reliability'])
+        print(solution_qos)
+
                     
 
 if __name__ == '__main__':
@@ -64,7 +93,7 @@ if __name__ == '__main__':
     max_ser_set = 4
     batch = 2
     env = ServiceComEnv(max_node_num, max_ser_set)
-    workflows, tasks, masks, constraints = env.reset(batch, mode='tiny')
+    workflows, tasks, masks, constraints = env.reset(batch, mode='tiny', norm=False)
     # print(masks)
     # print(workflows)
     # print(tasks)

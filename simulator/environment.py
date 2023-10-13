@@ -1,10 +1,7 @@
 import numpy as np
 import random
-
-ss = 1
-random.seed(ss)
-np.random.seed(ss)
-from generator import WorkflowGenerator, ServiceGenerator, ConstraintGenerator
+from copy import deepcopy
+from simulator.generator import WorkflowGenerator, ServiceGenerator, ConstraintGenerator
 
 class ServiceComEnv:
     def __init__(self, max_node_num=10, max_ser_set=100, attributes=['Response Time', 'Availability', 'Throughput', 'Reliability']):
@@ -29,7 +26,7 @@ class ServiceComEnv:
             return self.tasks, None
         else:
             self.tasks = np.zeros([num, self.max_node_num, self.max_node_num + len(self.attributes) * self.max_ser_set])
-            self.masks = np.ones([num, self.max_node_num, self.max_ser_set])
+            self.masks = np.zeros([num, self.max_node_num, self.max_ser_set])
             if norm:
                 self.tasks[:,:, self.max_node_num ::4] = 3. # Response Time
                 self.tasks[:,:, self.max_node_num + 1::4] = -3. # Availability
@@ -42,12 +39,12 @@ class ServiceComEnv:
                 self.tasks[i, :, :self.max_node_num] = self.workflows[i]
                 for j in range(self.max_node_num):
                     
-                    ser_num = np.random.randint(1, self.max_ser_set)
+                    ser_num = np.random.randint(1, self.max_ser_set + 1)
                     set_j = self.service_gen.sample(ser_num, self.attributes, norm=norm)
                     order = list(range(self.max_ser_set))
                     np.random.shuffle(order)
                     order = order[:ser_num]
-                    self.masks[i, j, order] = 0
+                    self.masks[i, j, order] = 1
 
                     for n in range(ser_num):
                         for k_i, k in enumerate(self.attributes):
@@ -70,36 +67,49 @@ class ServiceComEnv:
                 
                 # Response Time
                 if len(con_idx) == 0:
-                    aggregation['Response Time'][node_idx] = task[node_idx, max_node_num + solution[node_idx]*4 ]
+                    aggregation['Response Time'][node_idx] = task[node_idx, self.max_node_num + solution[node_idx]*4 ]
                 else:
-                    aggregation['Response Time'][node_idx] = max(aggregation['Response Time'][con_idx]) + task[node_idx, max_node_num + solution[node_idx]*4 ]
+                    aggregation['Response Time'][node_idx] = max(aggregation['Response Time'][con_idx]) + task[node_idx, self.max_node_num + solution[node_idx]*4 ]
                 
                 # Other
-                aggregation['Availability'][node_idx] = task[node_idx, max_node_num + solution[node_idx]*4 + 1]
-                aggregation['Throughput'][node_idx] = task[node_idx, max_node_num + solution[node_idx]*4 + 2]
-                aggregation['Reliability'][node_idx] = task[node_idx, max_node_num + solution[node_idx]*4 + 3]
+                aggregation['Availability'][node_idx] = task[node_idx, self.max_node_num + solution[node_idx]*4 + 1]
+                aggregation['Throughput'][node_idx] = task[node_idx, self.max_node_num + solution[node_idx]*4 + 2]
+                aggregation['Reliability'][node_idx] = task[node_idx, self.max_node_num + solution[node_idx]*4 + 3]
             
             # Aggregation
             solution_qos[query][0] = max(aggregation['Response Time'])
             solution_qos[query][1] = np.prod(aggregation['Availability'])
             solution_qos[query][2] = min(aggregation['Throughput'])
             solution_qos[query][3] = np.prod(aggregation['Reliability'])
-        print(solution_qos)
-        rewards = np.ones((query_num, 1))
-        for query in range(query_num):
-            if solution_qos[query][0] < self.constraints[query][0]:
-                rewards[query] = -1.
-            if np.any(solution_qos[1:] > self.constraints[query]):
-                rewards[query] = -1.
+        # print(solution_qos)
+        rewards = np.zeros((query_num, 1)) # maybe -1
+        tmp_solution_qos = deepcopy(solution_qos)
+        tmp_constraints = deepcopy(self.constraints)
+        tmp_solution_qos[:, 0] = -tmp_solution_qos[:, 0]
+        tmp_constraints[:, 0] = -tmp_constraints[:, 0]
+        rewards += np.expand_dims(np.sum(tmp_solution_qos < tmp_constraints, 1), axis=1)
+        # for query in range(query_num):
+        #     if solution_qos[query][0] < self.constraints[query][0]:
+        #         rewards[query] = -1.
+        #     if np.any(solution_qos[1:] > self.constraints[query]):
+        #         rewards[query] = -1.
         return rewards
 
-
+def random_generate_solution(masks):
+    solutions = np.zeros(masks.shape[:2])
+    batch = masks.shape[0]
+    node_num = masks.shape[1]
+    for i in range(batch):
+        for j in range(node_num):
+            solutions[i][j] = np.random.choice(np.where(masks[i][j]==0)[0])
+    return solutions.astype(np.int64)
+    
                     
 
 if __name__ == '__main__':
     max_node_num = 3
     max_ser_set = 4
-    batch = 200
+    batch = 500
     env = ServiceComEnv(max_node_num, max_ser_set)
     workflows, tasks, masks, constraints = env.reset(batch, mode='tiny', norm=True)
     # print(masks)
@@ -107,9 +117,11 @@ if __name__ == '__main__':
     # print(tasks)
     # print(constraints) 
     
-    solutions = np.random.randint(0, max_ser_set, [batch, max_node_num])
+    # solutions = np.random.randint(0, max_ser_set, [batch, max_node_num])
+    solutions = random_generate_solution(masks)
     rewards = env.step(solutions)
     print(rewards)
+    
     
     
     

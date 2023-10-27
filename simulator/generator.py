@@ -25,6 +25,12 @@ class ServiceGenerator:
         self.bounds['Availability'] = [0., 1.]
         self.bounds['Successability'] = [0., 1.]
         self.bounds['Reliability'] = [0., 1.]
+        self.mean['Availability'] = 0.
+        self.mean['Successability'] = 0.
+        self.mean['Reliability'] = 0.
+        self.std['Availability'] = 1.
+        self.std['Successability'] = 1.
+        self.std['Reliability'] = 1.
         print('complete')
         
     def sample(self, nums=1, attributes=['Response Time', 'Availability', 'Throughput', 'Reliability'], norm = True):
@@ -113,13 +119,13 @@ class ConstraintGenerator:
                 constraint['Reliability'] = np.prod(constraint['Reliability'])
                 constraints.append(constraint)
             else:
-                avai = np.prod(constraint['Availability']*self.service_gen.std['Availability'] + self.service_gen.mean['Availability'])
-                avai = (avai - self.service_gen.mean['Availability'])/self.service_gen.std['Availability']
-                reli = np.prod(constraint['Reliability']*self.service_gen.std['Reliability'] + self.service_gen.mean['Reliability'])
-                reli = (reli - self.service_gen.mean['Reliability'])/self.service_gen.std['Reliability']
-                constraints[query] = np.array([max(constraint['Response Time']), min(constraint['Throughput']), np.prod(constraint['Availability']), np.prod(constraint['Reliability'])])
-                if norm:
-                    constraints[query] = np.array([max(constraint['Response Time']), min(constraint['Throughput']), avai, reli])
+                # avai = np.prod(constraint['Availability']*self.service_gen.std['Availability'] + self.service_gen.mean['Availability'])
+                # avai = (avai - self.service_gen.mean['Availability'])/self.service_gen.std['Availability']
+                # reli = np.prod(constraint['Reliability']*self.service_gen.std['Reliability'] + self.service_gen.mean['Reliability'])
+                # reli = (reli - self.service_gen.mean['Reliability'])/self.service_gen.std['Reliability']
+                constraints[query] = np.array([max(constraint['Response Time']), np.prod(constraint['Availability']), min(constraint['Throughput']), np.prod(constraint['Reliability'])])
+                # if norm:
+                #     constraints[query] = np.array([max(constraint['Response Time']), min(constraint['Throughput']), avai, reli])
                     
         
         return constraints
@@ -134,12 +140,12 @@ class ConstraintGenerator:
         
 
 if __name__ == '__main__':
-    gen1 = WorkflowGenerator()
-    wks, tpgs = gen1.sample(5)
+    gen1 = WorkflowGenerator(max_node_num=5)
+    wks, tpgs = gen1.sample(1, edge_density=0.8, render=True)
     print(wks)
     
-    gen2 = ServiceGenerator()
-    # print(gen2.sample(9, norm=False))
+    # gen2 = ServiceGenerator()
+    # # print(gen2.sample(9, norm=False))
 
-    gen3 = ConstraintGenerator(gen2)
-    print(gen3.sample(wks, tpgs, norm=True, mode='tiny'))
+    # gen3 = ConstraintGenerator(gen2)
+    # print(gen3.sample(wks, tpgs, norm=True, mode='tiny'))

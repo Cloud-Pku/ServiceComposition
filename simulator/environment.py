@@ -11,8 +11,12 @@ class ServiceComEnv:
         self.workflow_gen = WorkflowGenerator(max_node_num)
         self.service_gen = ServiceGenerator()
         self.constraint_gen = ConstraintGenerator(self.service_gen)
+        # only used for squential step
+        self.cur_task = None
+        self.aggregation = {k : np.array([0.]*self.max_node_num) for k in self.attributes}
     
     def reset(self, num=1, edge_density=0.2, mode='human', norm=True):
+        self.cur_task = self.max_node_num - 1
         self.workflows, self.topologicals = self.workflow_gen.sample(num, edge_density=edge_density)
         self.constraints = self.constraint_gen.sample(self.workflows, self.topologicals, self.attributes, norm=norm, mode=mode)
         if mode == 'human':
@@ -29,9 +33,9 @@ class ServiceComEnv:
             self.masks = np.zeros([num, self.max_node_num, self.max_ser_set])
             if norm:
                 self.tasks[:,:, self.max_node_num ::4] = 3. # Response Time
-                self.tasks[:,:, self.max_node_num + 1::4] = -3. # Availability
+                self.tasks[:,:, self.max_node_num + 1::4] = 0. # Availability
                 self.tasks[:,:, self.max_node_num + 2::4] = -3. # Throughput
-                self.tasks[:,:, self.max_node_num + 3::4] = -3. # Reliability
+                self.tasks[:,:, self.max_node_num + 3::4] = 0. # Reliability
             else:
                 self.tasks[:,:, self.max_node_num ::4] = np.max(self.service_gen.data['Response Time'])
                 # set the other as zeros
@@ -49,8 +53,8 @@ class ServiceComEnv:
                     for n in range(ser_num):
                         for k_i, k in enumerate(self.attributes):
                             self.tasks[i, j, self.max_node_num + order[n]*len(self.attributes) + k_i] = set_j[n][k]
-            
-            return self.workflows, self.tasks, self.masks, self.constraints
+            # self.constraints = np.array([[0., 0., 2.5, 0.95]]).repeat(num, 0)
+            return self.workflows, self.tasks, self.masks, self.constraints, np.array(self.topologicals)
     def step(self, solutions):
         query_num = len(self.workflows)
         solution_qos = np.zeros(self.constraints.shape)
@@ -87,7 +91,7 @@ class ServiceComEnv:
         tmp_constraints = deepcopy(self.constraints)
         tmp_solution_qos[:, 0] = -tmp_solution_qos[:, 0]
         tmp_constraints[:, 0] = -tmp_constraints[:, 0]
-        rewards += np.expand_dims(np.sum(tmp_solution_qos < tmp_constraints, 1), axis=1)
+        rewards += np.expand_dims(np.sum(tmp_solution_qos >= tmp_constraints, 1), axis=1)
         # for query in range(query_num):
         #     if solution_qos[query][0] < self.constraints[query][0]:
         #         rewards[query] = -1.
